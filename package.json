@@ -16,7 +16,8 @@
   "scripts": {
     "built": "rm -rf built && tsc",
     "watch": "tsc -w --outDir demo/built",
-    "test": "jest"
+    "test": "jest",
+    "postinstall": "yarn built"
   },
   "jest": {
     "verbose": true,
@@ -49,10 +50,10 @@
     "jest": "^24.9.0",
     "jest-react-native": "^18.0.0",
     "pre-commit": "^1.2.2",
+    "prettier": "^1.18.2",
     "react": "^16.0.0",
     "react-native": "*",
     "ts-jest": "^24.0.2",
-    "prettier": "^1.18.2",
     "typescript": "^3.0.3"
   },
   "peerDependencies": {

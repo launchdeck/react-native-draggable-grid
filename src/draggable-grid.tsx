@@ -1,5 +1,5 @@
-import * as React from 'react'
-import { useState, useEffect } from 'react'
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import {
     PanResponder,
     Animated,
@@ -8,9 +8,9 @@ import {
     GestureResponderEvent,
     PanResponderGestureState,
     ViewStyle,
-} from 'react-native'
-import { Block } from './block'
-import { findKey, findIndex, differenceBy } from './utils'
+} from 'react-native';
+import { Block } from './block';
+import { findKey, findIndex, differenceBy } from './utils';
 
 export interface IOnLayoutEvent {
     nativeEvent: { layout: { x: number; y: number; width: number; height: number } }
@@ -27,6 +27,7 @@ export interface IDraggableGridProps<DataType extends IBaseItemType> {
     data: DataType[]
     renderItem: (item: DataType, order: number) => React.ReactElement<any>
     style?: ViewStyle
+    itemWidth?: number
     itemHeight?: number
     dragStartAnimation?: StyleProp<any>
     onItemPress?: (item: DataType) => void
@@ -35,55 +36,59 @@ export interface IDraggableGridProps<DataType extends IBaseItemType> {
     onResetSort?: (newSortedData: DataType[]) => void
     innerRef?: any
 }
+
 interface IPositionOffset {
     x: number
     y: number
 }
+
 interface IOrderMapItem {
     order: number
 }
+
 interface IItem<DataType> {
     key: string
     itemData: DataType
     currentPosition: Animated.AnimatedValueXY
 }
-let activeBlockOffset = { x: 0, y: 0 }
-const blockPositions: IPositionOffset[] = []
-const orderMap: {
-    [itemKey: string]: IOrderMapItem
-} = {}
-const itemMap: {
-    [itemKey: string]: any
-} = {}
-const items: IItem<any>[] = []
 
-export const DraggableGrid = function<DataType extends IBaseItemType>(
-    props: IDraggableGridProps<DataType>,
-) {
-    const [blockHeight, setBlockHeight] = useState(0)
-    const [blockWidth, setBlockWidth] = useState(0)
-    const [gridHeight] = useState<Animated.Value>(new Animated.Value(0))
-    const [hadInitBlockSize, setHadInitBlockSize] = useState(false)
-    const [dragStartAnimatedValue] = useState(new Animated.Value(1))
+let activeBlockOffset = { x: 0, y: 0 };
+
+const blockPositions: IPositionOffset[] = [];
+const orderMap: { [itemKey: string]: IOrderMapItem } = {};
+const itemMap: { [itemKey: string]: any } = {};
+
+const items: IItem<any>[] = [];
+
+const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: IDraggableGridProps<DataType>, ref: any)
+{
+    const [blockHeight, setBlockHeight] = useState(0);
+    const [blockWidth, setBlockWidth] = useState(0);
+    const [gridHeight] = useState<Animated.Value>(new Animated.Value(0));
+    const [hadInitBlockSize, setHadInitBlockSize] = useState(false);
+    const [dragStartAnimatedValue] = useState(new Animated.Value(1));
     const [gridLayout, setGridLayout] = useState({
         x: 0,
         y: 0,
         width: 0,
         height: 0,
-    })
-    const [activeItemIndex, setActiveItemIndex] = useState<undefined | number>()
+    });
+
+    const [activeItemIndex, setActiveItemIndex] = useState<undefined | number>();
 
     const assessGridSize = (event: IOnLayoutEvent) => {
-        if (!hadInitBlockSize) {
-            let blockWidth = event.nativeEvent.layout.width / props.numColumns
-            let blockHeight = props.itemHeight || blockWidth
-            setBlockWidth(blockWidth)
-            setBlockHeight(blockHeight)
-            setGridLayout(event.nativeEvent.layout)
-            setHadInitBlockSize(true)
+        if (!hadInitBlockSize)
+        {
+            let blockWidth = props.itemWidth || event.nativeEvent.layout.width / props.numColumns;
+            let blockHeight = props.itemHeight || blockWidth;;
+            setBlockWidth(blockWidth);
+            setBlockHeight(blockHeight);
+            setGridLayout(event.nativeEvent.layout);
+            setHadInitBlockSize(true);
         }
-    }
-    const [panResponderCapture, setPanResponderCapture] = useState(false)
+    };
+
+    const [panResponderCapture, setPanResponderCapture] = useState(false);
 
     const panResponder = PanResponder.create({
         onStartShouldSetPanResponder: () => true,
@@ -95,172 +100,199 @@ export const DraggableGrid = function<DataType extends IBaseItemType>(
         onPanResponderGrant: onStartDrag,
         onPanResponderMove: onHandMove,
         onPanResponderRelease: onHandRelease,
-    })
+    });
 
-    function initBlockPositions() {
-        items.forEach((item, index) => {
-            blockPositions[index] = getBlockPositionByOrder(index)
-        })
-    }
-    function getBlockPositionByOrder(order: number) {
-        if (blockPositions[order]) {
-            return blockPositions[order]
-        }
-        const columnOnRow = order % props.numColumns
-        const y = blockHeight * Math.floor(order / props.numColumns)
-        const x = columnOnRow * blockWidth
-        return {
-            x,
-            y,
-        }
-    }
-    function resetGridHeight() {
-        const rowCount = Math.ceil(props.data.length / props.numColumns)
-        gridHeight.setValue(rowCount * blockHeight)
-    }
-    function onBlockPress(itemIndex: number) {
-        props.onItemPress && props.onItemPress(items[itemIndex].itemData)
-    }
-    function onStartDrag(nativeEvent: GestureResponderEvent, gestureState: PanResponderGestureState) {
-        const activeItem = getActiveItem()
-        if (!activeItem) return false
-        props.onDragStart && props.onDragStart(activeItem.itemData)
-        const { x0, y0, moveX, moveY } = gestureState
-        const activeOrigin = blockPositions[orderMap[activeItem.key].order]
-        const x = activeOrigin.x - x0
-        const y = activeOrigin.y - y0
-        activeItem.currentPosition.setOffset({
-            x,
-            y,
-        })
-        activeBlockOffset = {
-            x,
-            y,
-        }
-        activeItem.currentPosition.setValue({
-            x: moveX,
-            y: moveY,
-        })
-    }
-    function onHandMove(nativeEvent: GestureResponderEvent, gestureState: PanResponderGestureState) {
-        const activeItem = getActiveItem()
-        if (!activeItem) return false
-        const { moveX, moveY } = gestureState
+    // Expose methods
+    React.useImperativeHandle(ref, () => ({
+        onHandRelease: () => onHandRelease()
+    }));
 
-        const xChokeAmount = Math.max(0, activeBlockOffset.x + moveX - (gridLayout.width - blockWidth))
-        const xMinChokeAmount = Math.min(0, activeBlockOffset.x + moveX)
+    function initBlockPositions()
+    {
+        items.forEach((item, index) => blockPositions[index] = getBlockPositionByOrder(index));
+    }
+
+    function getBlockPositionByOrder(order: number)
+    {
+        if (blockPositions[order]) return blockPositions[order];
+
+        const columnOnRow = order % props.numColumns;
+        const y = blockHeight * Math.floor(order / props.numColumns);
+        const x = columnOnRow * blockWidth;
+        return({ x, y })
+    }
+
+    function resetGridHeight()
+    {
+        const rowCount = Math.ceil(props.data.length / props.numColumns);
+        gridHeight.setValue(rowCount * blockHeight);
+    }
+
+    function onBlockPress(itemIndex: number)
+    {
+        props.onItemPress && props.onItemPress(items[itemIndex].itemData);
+    }
+
+    function onStartDrag(nativeEvent: GestureResponderEvent, gestureState: PanResponderGestureState)
+    {
+        const activeItem = getActiveItem();
+        if (!activeItem) return false;
+        props.onDragStart && props.onDragStart(activeItem.itemData);
+        const { x0, y0, moveX, moveY } = gestureState;
+        const activeOrigin = blockPositions[orderMap[activeItem.key].order];
+        const x = activeOrigin.x - x0;
+        const y = activeOrigin.y - y0;
+        activeItem.currentPosition.setOffset({ x, y });
+        activeBlockOffset = { x, y };
+        activeItem.currentPosition.setValue({ x: moveX, y: moveY });
+    }
+
+    function onHandMove(nativeEvent: GestureResponderEvent, gestureState: PanResponderGestureState)
+    {
+        const activeItem = getActiveItem();
+        if (!activeItem) return false;
+        const { moveX, moveY } = gestureState;
+
+        const xChokeAmount = Math.max(0, activeBlockOffset.x + moveX - (gridLayout.width - blockWidth));
+        const xMinChokeAmount = Math.min(0, activeBlockOffset.x + moveX);
 
         const dragPosition = {
             x: moveX - xChokeAmount - xMinChokeAmount,
             y: moveY,
-        }
-        const originPosition = blockPositions[orderMap[activeItem.key].order]
-        const dragPositionToActivePositionDistance = getDistance(dragPosition, originPosition)
-        activeItem.currentPosition.setValue(dragPosition)
+        };
 
-        let closetItemIndex = activeItemIndex as number
-        let closetDistance = dragPositionToActivePositionDistance
+        const originPosition = blockPositions[orderMap[activeItem.key].order];
+        const dragPositionToActivePositionDistance = getDistance(dragPosition, originPosition);
+        activeItem.currentPosition.setValue(dragPosition);
+
+        let closetItemIndex = activeItemIndex as number;
+        let closetDistance = dragPositionToActivePositionDistance;
 
         items.forEach((item, index) => {
-            if (item.itemData.disabledReSorted) return
-            if (index != activeItemIndex) {
-                const dragPositionToItemPositionDistance = getDistance(
-                    dragPosition,
-                    blockPositions[orderMap[item.key].order],
-                )
-                if (
-                    dragPositionToItemPositionDistance < closetDistance &&
-                    dragPositionToItemPositionDistance < blockWidth
-                ) {
-                    closetItemIndex = index
-                    closetDistance = dragPositionToItemPositionDistance
+            if (item.itemData.disabledReSorted) return;
+            if (index != activeItemIndex)
+            {
+                const dragPositionToItemPositionDistance = getDistance(dragPosition, blockPositions[orderMap[item.key].order]);
+                if (dragPositionToItemPositionDistance < closetDistance && dragPositionToItemPositionDistance < blockWidth)
+                {
+                    closetItemIndex = index;
+                    closetDistance = dragPositionToItemPositionDistance;
                 }
             }
-        })
-        if (activeItemIndex != closetItemIndex) {
-            const closetOrder = orderMap[items[closetItemIndex].key].order
-            resetBlockPositionByOrder(orderMap[activeItem.key].order, closetOrder)
-            orderMap[activeItem.key].order = closetOrder
-            props.onResetSort && props.onResetSort(getSortData())
+        });
+
+        if (activeItemIndex != closetItemIndex)
+        {
+            const closetOrder = orderMap[items[closetItemIndex].key].order;
+            resetBlockPositionByOrder(orderMap[activeItem.key].order, closetOrder);
+            orderMap[activeItem.key].order = closetOrder;
+            props.onResetSort && props.onResetSort(getSortData());
         }
     }
-    function onHandRelease() {
-        const activeItem = getActiveItem()
-        if (!activeItem) return false
-        props.onDragRelease && props.onDragRelease(getSortData())
-        setPanResponderCapture(false)
-        activeItem.currentPosition.flattenOffset()
-        moveBlockToBlockOrderPosition(activeItem.key)
-        setActiveItemIndex(undefined)
+
+    function onHandRelease()
+    {
+        const activeItem = getActiveItem();
+        if (!activeItem) return false;
+        props.onDragRelease && props.onDragRelease(getSortData());
+        setPanResponderCapture(false);
+        activeItem.currentPosition.flattenOffset();
+        moveBlockToBlockOrderPosition(activeItem.key);
+        setActiveItemIndex(undefined);
     }
-    function resetBlockPositionByOrder(activeItemOrder: number, insertedPositionOrder: number) {
-        let disabledReSortedItemCount = 0
-        if (activeItemOrder > insertedPositionOrder) {
-            for (let i = activeItemOrder - 1; i >= insertedPositionOrder; i--) {
-                const key = getKeyByOrder(i)
-                const item = itemMap[key]
-                if (item && item.disabledReSorted) {
-                    disabledReSortedItemCount++
-                } else {
-                    orderMap[key].order += disabledReSortedItemCount + 1
-                    disabledReSortedItemCount = 0
-                    moveBlockToBlockOrderPosition(key)
+
+    function resetBlockPositionByOrder(activeItemOrder: number, insertedPositionOrder: number)
+    {
+        let disabledReSortedItemCount = 0;
+        if (activeItemOrder > insertedPositionOrder)
+        {
+            for (let i = activeItemOrder - 1; i >= insertedPositionOrder; i--)
+            {
+                const key = getKeyByOrder(i);
+                const item = itemMap[key];
+                if (item && item.disabledReSorted)
+                {
+                    disabledReSortedItemCount++;
                 }
-            }
-        } else {
-            for (let i = activeItemOrder + 1; i <= insertedPositionOrder; i++) {
-                const key = getKeyByOrder(i)
-                const item = itemMap[key]
-                if (item && item.disabledReSorted) {
-                    disabledReSortedItemCount++
-                } else {
-                    orderMap[key].order -= disabledReSortedItemCount + 1
-                    disabledReSortedItemCount = 0
-                    moveBlockToBlockOrderPosition(key)
+                else
+                {
+                    orderMap[key].order += disabledReSortedItemCount + 1;
+                    disabledReSortedItemCount = 0;
+                    moveBlockToBlockOrderPosition(key);
                 }
             }
         }
+        else
+        {
+            for (let i = activeItemOrder + 1; i <= insertedPositionOrder; i++)
+            {
+                const key = getKeyByOrder(i);
+                const item = itemMap[key];
+                if (item && item.disabledReSorted)
+                {
+                    disabledReSortedItemCount++;
+                }
+                else
+                {
+                    orderMap[key].order -= disabledReSortedItemCount + 1;
+                    disabledReSortedItemCount = 0;
+                    moveBlockToBlockOrderPosition(key);
+                }
+            }
+        }
     }
-    function moveBlockToBlockOrderPosition(itemKey: string) {
-        const itemIndex = findIndex(items, item => item.key === itemKey)
-        items[itemIndex].currentPosition.flattenOffset()
+
+    function moveBlockToBlockOrderPosition(itemKey: string)
+    {
+        const itemIndex = findIndex(items, item => item.key === itemKey);
+        items[itemIndex].currentPosition.flattenOffset();
         Animated.timing(items[itemIndex].currentPosition, {
             toValue: blockPositions[orderMap[itemKey].order],
             duration: 200,
-        }).start()
-    }
-    function getKeyByOrder(order: number) {
-        return findKey(orderMap, (item: IOrderMapItem) => item.order === order) as string
+        }).start();
     }
 
-    function getSortData() {
-        const sortData: DataType[] = []
-        items.forEach(item => {
-            sortData[orderMap[item.key].order] = item.itemData
-        })
-        return sortData
+    function getKeyByOrder(order: number)
+    {
+        return findKey(orderMap, (item: IOrderMapItem) => item.order === order) as string;
     }
-    function getDistance(startOffset: IPositionOffset, endOffset: IPositionOffset) {
-        const xDistance = startOffset.x + activeBlockOffset.x - endOffset.x
-        const yDistance = startOffset.y + activeBlockOffset.y - endOffset.y
-        return Math.sqrt(Math.pow(xDistance, 2) + Math.pow(yDistance, 2))
-    }
-    function setActiveBlock(itemIndex: number, item: DataType) {
-        if (item.disabledDrag) return
 
-        setPanResponderCapture(true)
+    function getSortData()
+    {
+        const sortData: DataType[] = [];
+        items.forEach(item => sortData[orderMap[item.key].order] = item.itemData);
+        return sortData;
+    }
+
+    function getDistance(startOffset: IPositionOffset, endOffset: IPositionOffset)
+    {
+        const xDistance = startOffset.x + activeBlockOffset.x - endOffset.x;
+        const yDistance = startOffset.y + activeBlockOffset.y - endOffset.y;
+        return Math.sqrt(Math.pow(xDistance, 2) + Math.pow(yDistance, 2));
+    }
+
+    function setActiveBlock(itemIndex: number, item: DataType)
+    {
+        if (item.disabledDrag) return;
+
+        setPanResponderCapture(true);
         setActiveItemIndex(itemIndex)
     }
-    function startDragStartAnimation() {
-        if (!props.dragStartAnimation) {
-            dragStartAnimatedValue.setValue(1)
+
+    function startDragStartAnimation()
+    {
+        if (!props.dragStartAnimation)
+        {
+            dragStartAnimatedValue.setValue(1);
             Animated.timing(dragStartAnimatedValue, {
                 toValue: 1.1,
                 duration: 100,
             }).start()
         }
     }
-    function getBlockStyle(itemIndex: number) {
+
+    function getBlockStyle(itemIndex: number)
+    {
         return [
             {
                 justifyContent: 'center',
@@ -275,22 +307,28 @@ export const DraggableGrid = function<DataType extends IBaseItemType>(
             },
         ]
     }
-    function getDragStartAnimation(itemIndex: number) {
+
+    function getDragStartAnimation(itemIndex: number)
+    {
         if (activeItemIndex != itemIndex) {
             return
         }
 
-        const dragStartAnimation = props.dragStartAnimation || getDefaultDragStartAnimation()
+        const dragStartAnimation = props.dragStartAnimation || getDefaultDragStartAnimation();
         return {
             zIndex: 3,
             ...dragStartAnimation,
         }
     }
-    function getActiveItem() {
-        if (activeItemIndex === undefined) return false
+
+    function getActiveItem()
+    {
+        if (activeItemIndex === undefined) return false;
         return items[activeItemIndex]
     }
-    function getDefaultDragStartAnimation() {
+
+    function getDefaultDragStartAnimation()
+    {
         return {
             transform: [
                 {
@@ -306,26 +344,31 @@ export const DraggableGrid = function<DataType extends IBaseItemType>(
             },
         }
     }
-    function addItem(item: DataType, index: number) {
-        blockPositions.push(getBlockPositionByOrder(items.length))
+
+    function addItem(item: DataType, index: number)
+    {
+        blockPositions.push(getBlockPositionByOrder(items.length));
         orderMap[item.key] = {
             order: index,
-        }
-        itemMap[item.key] = item
+        };
+        itemMap[item.key] = item;
         items.push({
             key: item.key,
             itemData: item,
-            currentPosition: new Animated.ValueXY(getBlockPositionByOrder(index)),
+            currentPosition: new Animated.ValueXY(getBlockPositionByOrder(index))
         })
     }
 
-    function removeItem(item: IItem<DataType>) {
-        const itemIndex = findIndex(items, curItem => curItem.key === item.key)
-        items.splice(itemIndex, 1)
-        blockPositions.pop()
-        delete orderMap[item.key]
+    function removeItem(item: IItem<DataType>)
+    {
+        const itemIndex = findIndex(items, curItem => curItem.key === item.key);
+        items.splice(itemIndex, 1);
+        blockPositions.pop();
+        delete orderMap[item.key];
     }
-    function diffData() {
+
+    function diffData()
+    {
         props.data.forEach((item, index) => {
             if (orderMap[item.key]) {
                 if (orderMap[item.key].order != index) {
@@ -340,22 +383,28 @@ export const DraggableGrid = function<DataType extends IBaseItemType>(
             } else {
                 addItem(item, index)
             }
-        })
+        });
         const deleteItems = differenceBy(items, props.data, 'key')
         deleteItems.forEach(item => {
             removeItem(item)
         })
     }
+
     useEffect(() => startDragStartAnimation(), [activeItemIndex]);
+
     useEffect(() => {
         if (hadInitBlockSize) {
             initBlockPositions()
         }
-    }, [gridLayout])
+    }, [gridLayout]);
+
     useEffect(() => resetGridHeight());
-    if (hadInitBlockSize) {
+
+    if (hadInitBlockSize)
+    {
         diffData()
     }
+
     const itemList = items.map((item, itemIndex) => {
         return (
             <Block
@@ -370,18 +419,8 @@ export const DraggableGrid = function<DataType extends IBaseItemType>(
         )
     });
 
-    function resetCurrentActiveItem()
-    {
-        setPanResponderCapture(false);
-        setActiveItemIndex(undefined);
-    }
-
     return (
         <Animated.View
-            ref={(comp: any) => {
-                props.innerRef(comp);
-                props.innerRef.current = comp;
-            }}
             style={[
                 styles.draggableGrid,
                 props.style,
@@ -401,4 +440,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
     },
-})
+});
+
+export const DraggableGrid = React.forwardRef(OriginalDraggableGrid);
