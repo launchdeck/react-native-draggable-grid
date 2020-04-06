@@ -249,6 +249,7 @@ const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: ID
         Animated.timing(items[itemIndex].currentPosition, {
             toValue: blockPositions[orderMap[itemKey].order],
             duration: 200,
+            useNativeDriver: false
         }).start();
     }
 
@@ -287,6 +288,7 @@ const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: ID
             Animated.timing(dragStartAnimatedValue, {
                 toValue: 1.1,
                 duration: 100,
+                useNativeDriver: false
             }).start()
         }
     }
