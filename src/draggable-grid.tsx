@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import {
     PanResponder,
     Animated,
@@ -34,7 +34,7 @@ export interface IDraggableGridProps<DataType extends IBaseItemType> {
     onDragStart?: (item: DataType) => void
     onDragRelease?: (newSortedData: DataType[]) => void
     onResetSort?: (newSortedData: DataType[]) => void
-    innerRef?: any
+    isActive?: boolean
 }
 
 interface IPositionOffset {
@@ -54,27 +54,33 @@ interface IItem<DataType> {
 
 let activeBlockOffset = { x: 0, y: 0 };
 
-const blockPositions: IPositionOffset[] = [];
+// const blockPositions: IPositionOffset[] = [];
 const orderMap: { [itemKey: string]: IOrderMapItem } = {};
 const itemMap: { [itemKey: string]: any } = {};
 
 const items: IItem<any>[] = [];
 
-const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: IDraggableGridProps<DataType>, ref: any)
+const DraggableGrid = function<DataType extends IBaseItemType>(props: IDraggableGridProps<DataType>, ref: any)
 {
     const [blockHeight, setBlockHeight] = useState(0);
     const [blockWidth, setBlockWidth] = useState(0);
     const [gridHeight] = useState<Animated.Value>(new Animated.Value(0));
     const [hadInitBlockSize, setHadInitBlockSize] = useState(false);
     const [dragStartAnimatedValue] = useState(new Animated.Value(1));
+    const [rowCount, setRowCount] = useState(0);
+    const [blockPositions, setBlockPositions] = useState<IPositionOffset[]>([]);
     const [gridLayout, setGridLayout] = useState({
         x: 0,
         y: 0,
         width: 0,
         height: 0,
     });
-
     const [activeItemIndex, setActiveItemIndex] = useState<undefined | number>();
+
+    // Expose inner methods
+    useImperativeHandle(ref, () => ({
+        releaseAllBlocks: () => onHandRelease()
+    }))
 
     const assessGridSize = (event: IOnLayoutEvent) => {
         if (!hadInitBlockSize)
@@ -102,14 +108,11 @@ const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: ID
         onPanResponderRelease: onHandRelease,
     });
 
-    // Expose methods
-    React.useImperativeHandle(ref, () => ({
-        onHandRelease: () => onHandRelease()
-    }));
-
     function initBlockPositions()
     {
-        items.forEach((item, index) => blockPositions[index] = getBlockPositionByOrder(index));
+        const newPositions = [...blockPositions];
+        items.forEach((item, index) => newPositions[index] = getBlockPositionByOrder(index));
+        setBlockPositions(newPositions);
     }
 
     function getBlockPositionByOrder(order: number)
@@ -125,6 +128,7 @@ const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: ID
     function resetGridHeight()
     {
         const rowCount = Math.ceil(props.data.length / props.numColumns);
+        setRowCount(rowCount);
         gridHeight.setValue(rowCount * blockHeight);
     }
 
@@ -349,7 +353,8 @@ const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: ID
 
     function addItem(item: DataType, index: number)
     {
-        blockPositions.push(getBlockPositionByOrder(items.length));
+        const newPositions = [...blockPositions, getBlockPositionByOrder(items.length)]
+        setBlockPositions(newPositions);
         orderMap[item.key] = {
             order: index,
         };
@@ -365,7 +370,9 @@ const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: ID
     {
         const itemIndex = findIndex(items, curItem => curItem.key === item.key);
         items.splice(itemIndex, 1);
-        blockPositions.pop();
+        const newPositions = [...blockPositions];
+        newPositions.pop();
+        setBlockPositions(newPositions);
         delete orderMap[item.key];
     }
 
@@ -391,6 +398,14 @@ const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: ID
             removeItem(item)
         })
     }
+
+    // Release all active blocks when the grid is no longer active
+    useEffect(() => {
+        if (!props.isActive)
+        {
+            onHandRelease();
+        }
+    }, [props.isActive]);
 
     useEffect(() => startDragStartAnimation(), [activeItemIndex]);
 
@@ -444,4 +459,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export const DraggableGrid = React.forwardRef(OriginalDraggableGrid);
+export const Draggable = forwardRef(DraggableGrid);
