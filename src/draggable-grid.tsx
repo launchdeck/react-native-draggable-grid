@@ -60,7 +60,7 @@ const itemMap: { [itemKey: string]: any } = {};
 
 const items: IItem<any>[] = [];
 
-const DraggableGrid = function<DataType extends IBaseItemType>(props: IDraggableGridProps<DataType>, ref: any)
+const OriginalDraggableGrid = function<DataType extends IBaseItemType>(props: IDraggableGridProps<DataType>, ref: any)
 {
     const [blockHeight, setBlockHeight] = useState(0);
     const [blockWidth, setBlockWidth] = useState(0);
@@ -459,4 +459,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export const Draggable = forwardRef(DraggableGrid);
+export const DraggableGrid = forwardRef(OriginalDraggableGrid);
